@@ -270,16 +270,20 @@ class itemgetter:
     """
     __slots__ = ('_items', '_call')
 
-    def __init__(self, item, *items):
+    def __init__(self, item, *items, separator=None):
         if not items:
             self._items = (item,)
+            elements = item.split(separator) if separator else (item,)
             def func(obj):
-                return obj[item]
+                for element in elements:
+                    obj = getitem(obj, element)
+                return obj
             self._call = func
         else:
             self._items = items = (item,) + items
+            getters = (itemgetter(item, separator=separator) for item in items)
             def func(obj):
-                return tuple(obj[i] for i in items)
+                return tuple(getter(obj) for getter in getters)
             self._call = func
 
     def __call__(self, obj):

@@ -401,6 +401,13 @@ class OperatorTestCase:
         self.assertEqual(operator.itemgetter(2,10,5)(data), ('2', '10', '5'))
         self.assertRaises(TypeError, operator.itemgetter(2, 'x', 5), data)
 
+        # multiple gets on dict
+        d = dict(a=dict(b=1), c=dict(d=dict(e=2)))
+        ab = operator.itemgetter("a.b", separator=".")(d)
+        self.assertEquals(1, ab)
+        cde = operator.itemgetter("c d e", separator=" ")(d)
+        self.assertEquals(2, cde)
+
     def test_methodcaller(self):
         operator = self.module
         self.assertRaises(TypeError, operator.methodcaller)
