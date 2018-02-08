@@ -35,7 +35,7 @@ __all__ = ['BASIC_FORMAT', 'BufferingFormatter', 'CRITICAL', 'DEBUG', 'ERROR',
            'exception', 'fatal', 'getLevelName', 'getLogger', 'getLoggerClass',
            'info', 'log', 'makeLogRecord', 'setLoggerClass', 'shutdown',
            'warn', 'warning', 'getLogRecordFactory', 'setLogRecordFactory',
-           'lastResort', 'raiseExceptions']
+           'lastResort', 'raiseExceptions', 'ConsoleHandler']
 
 import threading
 
@@ -935,6 +935,63 @@ class Handler(Filterer):
     def __repr__(self):
         level = getLevelName(self.level)
         return '<%s (%s)>' % (self.__class__.__name__, level)
+
+
+class ConsoleHandler(Handler):
+    """
+    A handler class which writes logging records, appropriately formatted,
+    to a stdout and stderr in funcion of the level.
+
+    Note the Handler writes to only one of the streams based on the
+    stderr_level parameter. If the log record level is equal or greater than
+    the provided one, the logs will be sent to stderr.
+    """
+
+    terminator = '\n'
+
+    def __init__(self, stderr_level=WARNING):
+        """Initialize the handler."""
+        super().__init__()
+        self.stderr_level = stderr_level
+        self.stdout = sys.stdout
+        self.stderr = sys.stderr
+
+    def flush(self):
+        """
+        Flushes stdout and stderr
+        """
+        self.acquire()
+        try:
+            self.stdout.flush()
+            self.stderr.flush()
+        finally:
+            self.release()
+
+    def emit(self, record):
+        """
+        Emit a record.
+
+        If a formatter is specified, it is used to format the record.
+        The record is then written to the appropiate stream with a trailing
+        newline. If exception information is present, it is formatted using
+        traceback.print_exception and appended to the stream.
+        """
+        try:
+            msg = self.format(record)
+            if record.levelno >= self.stderr_level:
+                stream = self.stderr
+            else:
+                stream = self.stdout
+            stream.write(msg)
+            stream.write(self.terminator)
+            self.flush()
+        except Exception:
+            self.handleError(record)
+
+    def __repr__(self):
+        level = getLevelName(self.level)
+        return '<%s (%s, %s)>' % (self.__class__.__name__, level, self.stderr_level)
+
 
 class StreamHandler(Handler):
     """
