@@ -1316,56 +1316,35 @@ Examples of working with datetime objects:
 
 Using datetime with tzinfo:
 
-    >>> from datetime import timedelta, datetime, tzinfo
-    >>> class TZ1(tzinfo):
+    >>> from datetime import timedelta, datetime, tzinfo, timezone
+    >>> class KabulTz(tzinfo):
+    ...     # Kabul used +4 until 1045, when they moved to +4:30
     ...     def utcoffset(self, dt):
-    ...         return timedelta(hours=1) + self.dst(dt)
-    ...     def dst(self, dt):
-    ...         # DST starts last Sunday in March
-    ...         d = datetime(dt.year, 4, 1)   # ends last Sunday in October
-    ...         self.dston = d - timedelta(days=d.weekday() + 1)
-    ...         d = datetime(dt.year, 11, 1)
-    ...         self.dstoff = d - timedelta(days=d.weekday() + 1)
-    ...         if self.dston <=  dt.replace(tzinfo=None) < self.dstoff:
-    ...             return timedelta(hours=1)
+    ...         if dt.year >= 1945:
+    ...             return timedelta(hours=4, minutes=30)
     ...         else:
+    ...             return timedelta(hours=4)
+    ...     def dst(self, dt):
     ...             return timedelta(0)
     ...     def tzname(self,dt):
-    ...         return "UTC +2" if self.dst(dt) else "UTC +1"
+    ...         return "Asia/Kabul"
     ...
-    >>> class TZ2(tzinfo):
-    ...     def utcoffset(self, dt):
-    ...         return timedelta(hours=2) + self.dst(dt)
-    ...     def dst(self, dt):
-    ...         d = datetime(dt.year, 4, 1)
-    ...         self.dston = d - timedelta(days=d.weekday() + 1)
-    ...         d = datetime(dt.year, 11, 1)
-    ...         self.dstoff = d - timedelta(days=d.weekday() + 1)
-    ...         if self.dston <=  dt.replace(tzinfo=None) < self.dstoff:
-    ...             return timedelta(hours=1)
-    ...         else:
-    ...             return timedelta(0)
-    ...     def tzname(self,dt):
-    ...         return "UTC +3" if self.dst(dt) else "UTC +2"
     ...
-    >>> tz1 = TZ1()
-    >>> # Daylight Saving Time
-    >>> dt1 = datetime(2006, 11, 21, 16, 30, tzinfo=tz1)
-    >>> dt1.dst()
-    datetime.timedelta(0)
+    >>> tz1 =KabulTz()
+    >>> # Datetime before the change
+    >>> dt1 = datetime(1900, 11, 21, 16, 30, tzinfo=tz1)
     >>> dt1.utcoffset()
-    datetime.timedelta(seconds=3600)
+    datetime.timedelta(0, 14400)
+    >>> # Datetime after the change
     >>> dt2 = datetime(2006, 6, 14, 13, 0, tzinfo=tz1)
-    >>> dt2.dst()
-    datetime.timedelta(seconds=3600)
     >>> dt2.utcoffset()
-    datetime.timedelta(seconds=7200)
+    datetime.timedelta(0, 16200)
     >>> # Convert datetime to another time zone
-    >>> dt3 = dt2.astimezone(TZ2())
+    >>> dt3 = dt2.astimezone(timezone.utc)
     >>> dt3     # doctest: +ELLIPSIS
-    datetime.datetime(2006, 6, 14, 14, 0, tzinfo=<TZ2 object at 0x...>)
+    datetime.datetime(2006, 6, 14, 8, 30, tzinfo=datetime.timezone.utc)
     >>> dt2     # doctest: +ELLIPSIS
-    datetime.datetime(2006, 6, 14, 13, 0, tzinfo=<TZ1 object at 0x...>)
+    datetime.datetime(2006, 6, 14, 13, 0, tzinfo=<KabulTz object at 0x...>)
     >>> dt2.utctimetuple() == dt3.utctimetuple()
     True
 
