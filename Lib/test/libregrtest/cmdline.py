@@ -278,6 +278,9 @@ def _create_parser():
                        help='override the working directory for the test run')
     group.add_argument('--cleanup', action='store_true',
                        help='remove old test_python_* directories')
+    group.add_argument('--huntexceptioncycles',
+                       action='store_true',
+                       help='search for cyles that keep user objects alive')
     return parser
 
 
@@ -317,7 +320,8 @@ def _parse_args(args, **kwargs):
          findleaks=1, use_resources=None, trace=False, coverdir='coverage',
          runleaks=False, huntrleaks=False, verbose2=False, print_slow=False,
          random_seed=None, use_mp=None, verbose3=False, forever=False,
-         header=False, failfast=False, match_tests=None, pgo=False)
+         header=False, failfast=False, match_tests=None, pgo=False,
+         huntexceptioncycles=False)
     for k, v in kwargs.items():
         if not hasattr(ns, k):
             raise TypeError('%r is an invalid keyword argument '

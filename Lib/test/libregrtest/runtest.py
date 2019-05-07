@@ -1,4 +1,5 @@
 import collections
+import copy
 import faulthandler
 import functools
 import gc
@@ -9,6 +10,8 @@ import sys
 import time
 import traceback
 import unittest
+import unittest.mock
+import weakref
 
 from test import support
 from test.libregrtest.refleak import dash_R, clear_caches
@@ -73,6 +76,9 @@ def is_failed(result, ns):
     if ok == ENV_CHANGED:
         return ns.fail_env_changed
     return True
+
+# Dummy class used to detect excepiton cycles that keep objects alive
+class Dummy: pass
 
 
 def format_test_result(result):
@@ -209,6 +215,44 @@ def _test_module(the_module):
     support.run_unittest(tests)
 
 
+class CycleCheckerAssertRaisesContext(unittest.case._AssertRaisesContext):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    def __enter__(self):
+        return super().__enter__()
+    def __exit__(self, exc_type, exc_value, tb):
+        # copy paste from the original context without cleaning the traceback
+        if exc_type is None:
+            try:
+                exc_name = self.expected.__name__
+            except AttributeError:
+                exc_name = str(self.expected)
+            if self.obj_name:
+                self._raiseFailure("{} not raised by {}".format(exc_name,
+                                                                self.obj_name))
+            else:
+                self._raiseFailure("{} not raised".format(exc_name))
+        if not issubclass(exc_type, self.expected):
+            # let unexpected exceptions pass through
+            return False
+        # store exception, without traceback, for later retrieval
+        # we copy it to not modify the original exception
+        self.exception = copy.copy(exc_value).with_traceback(None)
+        for d in dir(exc_value):
+            try:
+                setattr(self.exception, d, getattr(exc_value, d))
+            except (TypeError, AttributeError):
+                pass
+        if self.expected_regex is None:
+            return True
+
+        expected_regex = self.expected_regex
+        if not expected_regex.search(str(exc_value)):
+            self._raiseFailure('"{}" does not match "{}"'.format(
+                     expected_regex.pattern, str(exc_value)))
+        return True
+
+
 def _runtest_inner2(ns, test_name):
     # Load the test function, run the test function, handle huntrleaks
     # and findleaks to detect leaks
@@ -226,13 +270,30 @@ def _runtest_inner2(ns, test_name):
     if test_runner is None:
         test_runner = functools.partial(_test_module, the_module)
 
+    # Prepare env change checks
+    obj_wr = lambda: None
+    refleak = False
+    if ns.huntrleaks:
+        test_runner = functools.partial(dash_R, ns, test_name, test_runner)
+
+    if ns.huntexceptioncycles:
+        def test_runner_with_cycles(original_test_runner):
+            nonlocal obj_wr
+            obj = Dummy()
+            obj_wr = weakref.ref(obj)
+            with unittest.mock.patch(
+                "unittest.case._AssertRaisesContext",
+                CycleCheckerAssertRaisesContext
+            ):
+                return original_test_runner()
+        test_runner = functools.partial(test_runner_with_cycles, test_runner)
+
     try:
-        if ns.huntrleaks:
-            # Return True if the test leaked references
-            refleak = dash_R(ns, test_name, test_runner)
-        else:
-            test_runner()
-            refleak = False
+        refleak = test_runner()
+        # del test_runner
+        if obj_wr() is not None:
+            support.environment_altered = True
+            print_warning(f"{test_name} kept user objects alive")
     finally:
         cleanup_test_droppings(test_name, ns.verbose)
 
