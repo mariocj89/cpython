@@ -25,6 +25,7 @@ To use, simply 'import logging' and log away!
 
 import sys, os, time, io, re, traceback, warnings, weakref, collections.abc
 
+import datetime
 from string import Template
 from string import Formatter as StrFormatter
 
@@ -550,7 +551,7 @@ class Formatter(object):
                         the record is emitted
     """
 
-    converter = time.localtime
+    converter = datetime.datetime.fromtimestamp
 
     def __init__(self, fmt=None, datefmt=None, style='%', validate=True):
         """
@@ -600,10 +601,17 @@ class Formatter(object):
         set the 'converter' attribute in the Formatter class.
         """
         ct = self.converter(record.created)
+
+        try:
+            formatting_function = ct.strftime
+        except AttributeError:
+            def formatting_function(format):
+                return time.strftime(format, ct)
+
         if datefmt:
-            s = time.strftime(datefmt, ct)
+            s = formatting_function(datefmt)
         else:
-            t = time.strftime(self.default_time_format, ct)
+            t = formatting_function(self.default_time_format)
             s = self.default_msec_format % (t, record.msecs)
         return s
 

@@ -3893,6 +3893,21 @@ class FormatterTest(unittest.TestCase):
         f.format(r)
         self.assertEqual(r.asctime, '1993-04-21 08:03:00,123')
 
+    def test_time_datetime_or_time_tiple_format_are_identical(self):
+        r = self.get_record()
+        f1 = logging.Formatter('%(asctime)s')
+        f1.converter = datetime.datetime.fromtimestamp
+        f2 = logging.Formatter('%(asctime)s')
+        f2.converter = time.localtime
+        assert f1.format(r) == f2.format(r)
+
+    def test_time_formatting_of_microsecond(self):
+        r = self.get_record()
+        f = logging.Formatter('%(asctime)s', datefmt="%f")
+        created_microseconds = int(r.created % 1 * 10 ** 6)
+        self.assertEquals(int(f.format(r)), created_microseconds)
+
+
 class TestBufferingFormatter(logging.BufferingFormatter):
     def formatHeader(self, records):
         return '[(%d)' % len(records)
