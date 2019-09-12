@@ -204,8 +204,10 @@ The Mock Class
     import asyncio
     import inspect
     import unittest
+    import threading
     from unittest.mock import sentinel, DEFAULT, ANY
     from unittest.mock import patch, call, Mock, MagicMock, PropertyMock, AsyncMock
+    from unittest.mock import ThreadingMock
     from unittest.mock import mock_open
 
 :class:`Mock` is a flexible mock object intended to replace the use of stubs and
@@ -1095,6 +1097,39 @@ object::
       >>> asyncio.run(main('bar'))
       >>> mock.await_args_list
       [call('foo'), call('bar')]
+
+
+.. class:: ThreadingMock(spec=None, side_effect=None, return_value=DEFAULT, wraps=None, name=None, spec_set=None, unsafe=False, **kwargs)
+
+  A version of :class:`MagicMock` for multithreading tests. The
+  :class:`ThreadingMock` object provides extra methods to wait for a call to
+  happen on a different thread, rather than assert on it immediately.
+
+  .. method:: wait_until_called(mock_timeout=None)
+
+      Waits until the the mock is called.
+      If ``mock_timeout`` is set, after that number of seconds waiting,
+      it raises an :exc:`AssertionError`, waits forever otherwise.
+
+        >>> mock = ThreadingMock()
+        >>> thread = threading.Thread(target=mock)
+        >>> thread.start()
+        >>> mock.wait_until_called(mock_timeout=1)
+        >>> thread.join()
+
+  .. method:: wait_until_any_call(*args, mock_timeout=None, **kwargs)
+
+      Waits until the the mock is called with the specified arguments.
+      If ``mock_timeout`` is set, after that number of seconds waiting,
+      it raises an :exc:`AssertionError`, waits forever otherwise.
+
+        >>> mock = ThreadingMock()
+        >>> thread = threading.Thread(target=mock, args=(1,2,), kwargs={"arg": "thing"})
+        >>> thread.start()
+        >>> mock.wait_until_any_call(1, 2, arg="thing")
+        >>> thread.join()
+
+  .. versionadded:: 3.10
 
 
 Calling

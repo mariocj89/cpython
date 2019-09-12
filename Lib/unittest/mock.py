@@ -14,6 +14,7 @@ __all__ = (
     'call',
     'create_autospec',
     'AsyncMock',
+    'ThreadingMock',
     'FILTER_DIR',
     'NonCallableMock',
     'NonCallableMagicMock',
@@ -31,6 +32,7 @@ import pprint
 import sys
 import builtins
 from asyncio import iscoroutinefunction
+import threading
 from types import CodeType, ModuleType, MethodType
 from unittest.util import safe_repr
 from functools import wraps, partial
@@ -2849,6 +2851,59 @@ class PropertyMock(Mock):
         return self()
     def __set__(self, obj, val):
         self(val)
+
+
+class ThreadingMock(MagicMock):
+    """
+    A mock that can be used to wait until on calls happening
+    in a different thread.
+    """
+
+    def __init__(self, *args, **kwargs):
+        _safe_super(ThreadingMock, self).__init__(*args, **kwargs)
+        self.__dict__["_event"] = threading.Event()
+        self.__dict__["_expected_calls"] = []
+        self.__dict__["_events_lock"] = threading.Lock()
+
+    def __get_event(self, expected_args, expected_kwargs):
+        with self._events_lock:
+            for args, kwargs, event in self._expected_calls:
+                if (args, kwargs) == (expected_args, expected_kwargs):
+                    return event
+            new_event = threading.Event()
+            self._expected_calls.append((expected_args, expected_kwargs, new_event))
+            return new_event
+
+
+    def _mock_call(self, *args, **kwargs):
+        ret_value = _safe_super(ThreadingMock, self)._mock_call(*args, **kwargs)
+
+        call_event = self.__get_event(args, kwargs)
+        call_event.set()
+
+        self._event.set()
+
+        return ret_value
+
+    def wait_until_called(self, mock_timeout=None):
+        """Wait until the mock object is called.
+
+        `mock_timeout` - time to wait for in seconds, waits forever otherwise.
+        """
+        if not self._event.wait(timeout=mock_timeout):
+            msg = (f"{self._mock_name or 'mock'} was not called before"
+                   f" timeout({mock_timeout}).")
+            raise AssertionError(msg)
+
+    def wait_until_any_call(self, *args, mock_timeout=None, **kwargs):
+        """Wait until the mock object is called with given args.
+
+        `mock_timeout` - time to wait for in seconds, waits forever otherwise.
+        """
+        event = self.__get_event(args, kwargs)
+        if not event.wait(timeout=mock_timeout):
+            expected_string = self._format_mock_call_signature(args, kwargs)
+            raise AssertionError(f'{expected_string} call not found')
 
 
 def seal(mock):
