@@ -16,6 +16,7 @@ import encodings
 import glob
 import io
 import os
+import pathlib
 import re
 import shutil
 import subprocess
@@ -712,6 +713,51 @@ class _pthFileTests(unittest.TestCase):
                 os.path.join(sys_prefix, 'from-env'),
             )], env=env)
         self.assertTrue(rc, "sys.path is incorrect")
+
+
+class TestModernSiteCustomize(unittest.TestCase):
+    def setUp(self):
+        tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmpdir.cleanup)
+        self.tmpdir = pathlib.Path(tmpdir.name)
+        self.site_dir = pathlib.Path(site._get_path(self.tmpdir))
+        self.site_dir.mkdir(parents=True)
+
+    def run_interpreter(self):
+        return subprocess.check_output(
+            [sys.executable, "-c", "pass"],
+            env={"PYTHONUSERBASE": str(self.tmpdir)}
+        )
+
+    def test_empty_folder(self):
+        sitecust_path = self.site_dir / "__sitecustomize__"
+        sitecust_path.mkdir()
+        output = self.run_interpreter()
+        self.assertEquals(output, b"")
+
+    def test_customize_scripts_are_run_in_order(self):
+        sitecust_path = self.site_dir / "__sitecustomize__"
+        sitecust_path.mkdir()
+        (sitecust_path / "script1.py").write_text("print(1)")
+        (sitecust_path / "script2.py").write_text("print(2)")
+        output = self.run_interpreter()
+        self.assertEquals(output, b"1\n2\n")
+
+    def test_failing_script_does_not_affect_others(self):
+        sitecust_path = self.site_dir / "__sitecustomize__"
+        sitecust_path.mkdir()
+        (sitecust_path / "script1.py").write_text("void main(void){}")
+        (sitecust_path / "script2.py").write_text("print(2)")
+        process = subprocess.run(
+            [sys.executable, "-c", "pass"],
+            env={"PYTHONUSERBASE": str(self.tmpdir)},
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.assertEquals(process.stdout, b"2\n")
+        self.assertIn(b"Error processing __sitecustomize__ script:  'script1.py'", process.stderr)
+        self.assertIn(b"SyntaxError: invalid syntax", process.stderr)
+
 
 
 if __name__ == "__main__":

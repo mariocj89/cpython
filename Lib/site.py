@@ -204,6 +204,34 @@ def addpackage(sitedir, name, known_paths):
     return known_paths
 
 
+def _find_py_files(path):
+    """Find `py` files in a folder"""
+    try:
+        for name in os.listdir(path):
+            if name.endswith(".py"):
+                yield name
+    except OSError:
+        return
+
+
+def _exec_sitecustomizes(path):
+    """Exec all sitecustomize files in a given path"""
+    for script_name in sorted(_find_py_files(path)):
+        script_path = os.path.join(path, script_name)
+        try:
+            with io.open_code(script_path) as f:
+                script_content = f.read()
+                sys.audit("sitecustomize.exec_file", script_path)
+                exec(script_content, {})
+        except Exception:
+            print("Error processing __sitecustomize__ script: ", repr(script_path),
+                  file=sys.stderr)
+            import traceback
+            for record in traceback.format_exception(*sys.exc_info()):
+                for line in record.splitlines():
+                    print(' ', line, file=sys.stderr)
+
+
 def addsitedir(sitedir, known_paths=None):
     """Add 'sitedir' argument to sys.path if missing and handle .pth files in
     'sitedir'"""
@@ -221,9 +249,18 @@ def addsitedir(sitedir, known_paths=None):
         names = os.listdir(sitedir)
     except OSError:
         return
-    names = [name for name in names if name.endswith(".pth")]
-    for name in sorted(names):
+    pth_files = []
+    has_sitecustomize = False
+    for name in names:
+        if name.endswith("pth"):
+            pth_files.append(name)
+        elif name == "__sitecustomize__":
+            has_sitecustomize = True
+    for name in sorted(pth_files):
         addpackage(sitedir, name, known_paths)
+    if has_sitecustomize:
+        folder_path = os.path.join(sitedir, "__sitecustomize__")
+        _exec_sitecustomizes(folder_path)
     if reset:
         known_paths = None
     return known_paths
